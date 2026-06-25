@@ -1,7 +1,6 @@
 import { prisma } from "../lib/prisma";
 import type { IOrderRepository } from "../interfaces/order.repository.interface";
-// Importe o enum gerado pelo Prisma para o status bater certinho
-import { OrderStatus } from "@prisma/client"; 
+import { OrderStatus } from '../../generated/prisma/client'
 
 export class OrderRepository implements IOrderRepository {
   async create(data: {

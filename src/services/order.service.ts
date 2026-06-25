@@ -1,5 +1,5 @@
 import { AppError } from "../errors/AppError";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from '../../generated/prisma/client'
 import type { CreateOrderDTO } from "../dtos/order/create-order.dto";
 
 // lib
