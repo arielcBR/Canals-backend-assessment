@@ -1,6 +1,10 @@
 import { AppError } from "../errors/AppError";
 import { OrderStatus } from '../../generated/prisma/client'
 import type { CreateOrderDTO } from "../dtos/order/create-order.dto";
+import type { OrderItemDTO } from "../dtos/order/create-order.dto";
+import type { OrderItemEnrichedDTO } from "../dtos/order/order-item-enriched.dto";
+import type { OrderResponseDTO, OrderShippingResponseDTO } from "../dtos/order/order-response.dto";
+import Decimal from "decimal.js";
 
 // lib
 import { prisma } from "../lib/prisma";
@@ -20,121 +24,140 @@ export class OrderService {
   private warehouseRepository = new WarehouseRepository();
   private orderRepository = new OrderRepository();
 
-  async create(data: CreateOrderDTO) {
-    const customer = await prisma.customer.findUnique({
-      where: { id: data.customerId }
+  async create(data: CreateOrderDTO): Promise<OrderResponseDTO> {
+    const customer      = await this.validateCustomer(data.customerId);
+    const enrichedItems = await this.enrichItemsWithPrices(data.items);
+    const warehouse     = await this.selectNearestWarehouse(data.items, data.shippingAddress);
+    const totalAmount   = this.calculateTotal(enrichedItems);
+    const payment       = await this.processPayment(data.payment.cardNumber, totalAmount, customer.id);
+    const order         = await this.orderRepository.create({
+      customerId:           customer.id,
+      warehouseId:          warehouse.id,
+      shippingStreet:       data.shippingAddress.street,
+      shippingNumber:       data.shippingAddress.number,
+      shippingComplement:   data.shippingAddress.complement ?? null,
+      shippingCity:         data.shippingAddress.city,
+      shippingState:        data.shippingAddress.state,
+      shippingCountry:      data.shippingAddress.country,
+      shippingZipCode:      data.shippingAddress.zipCode,
+      items:                enrichedItems,
+      totalAmount,
+      paymentTransactionId: payment.transactionId,
+      status:               OrderStatus.PAID,
     });
 
-    if (!customer) {
+    return this.buildResponse(order, warehouse, data.shippingAddress, enrichedItems, totalAmount);
+  }
+
+  private async validateCustomer(customerId: string) {
+    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+
+    if (!customer)
       throw new AppError("Customer not found", 404, "CUSTOMER_NOT_FOUND");
-    }
 
-    // 2. LIDANDO COM OS PREÇOS E PRODUTOS (Segurança)
-    // Extrai os IDs enviados pelo frontend e busca os preços reais no banco
-    const productIds = data.items.map(item => item.productId);
+    return customer;
+  }
+
+  private async enrichItemsWithPrices(items: OrderItemDTO[]): Promise<OrderItemEnrichedDTO[]> {
+    if (items.length === 0)
+      throw new AppError("Order must contain at least one item", 422, "EMPTY_ORDER");
+
+    const productIds = items.map(item => item.productId);
     const dbProducts = await prisma.product.findMany({
-      where: { id: { in: productIds } }
+      where: { id: { in: productIds } },
     });
 
-    if (dbProducts.length !== data.items.length) {
-      throw new AppError("One or more products were not found in our catalog", 404, "PRODUCT_NOT_FOUND");
+    if (dbProducts.length !== items.length) {
+      const foundIds   = new Set(dbProducts.map(p => p.id));
+      const missingIds = productIds.filter(id => !foundIds.has(id));
+
+      throw new AppError(
+        `The following products were not found: ${missingIds.join(", ")}`,
+        404,
+        "PRODUCT_NOT_FOUND"
+      );
     }
 
-    // Mescla a quantidade do DTO com o preço real do Banco de Dados
-    const enrichedItems = data.items.map(item => {
+    return items.map(item => {
       const product = dbProducts.find(p => p.id === item.productId)!;
       return {
         productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: Number(product.price) // Preço seguro vindo do banco
+        quantity:  item.quantity,
+        unitPrice: product.price,
       };
     });
+  }
 
-    // 3. Geocoding do endereço
+  private async selectNearestWarehouse(
+    items: OrderItemDTO[],
+    address: CreateOrderDTO["shippingAddress"]
+  ) {
     const shippingLocation = await geocodingMock.geocode(
-      `${data.shippingAddress.street}, ${data.shippingAddress.city}, ${data.shippingAddress.state}, ${data.shippingAddress.country}`
+      `${address.street}, ${address.city}, ${address.state}, ${address.country}`
     );
 
-    // 4. Buscar warehouses com estoque suficiente
-    const candidateWarehouses = await this.warehouseRepository.findWarehousesWithStock(data.items);
+    const candidates = await this.warehouseRepository.findWarehousesWithStock(items);
 
-    if (candidateWarehouses.length === 0) {
-      throw new AppError(
-        "No warehouse has sufficient stock for all items",
-        422,
-        "WAREHOUSE_NOT_FOUND"
-      );
-    }
+    if (candidates.length === 0)
+      throw new AppError("No warehouse has sufficient stock for all items", 422, "WAREHOUSE_NOT_FOUND");
 
-    // 5. Escolher warehouse mais próximo (Haversine)
-    const selectedWarehouse = candidateWarehouses.reduce((best, current) => {
-      const bestDistance = calculateDistance(
-        shippingLocation.lat,
-        shippingLocation.lng,
-        best.latitude,
-        best.longitude
-      );
-
-      const currentDistance = calculateDistance(
-        shippingLocation.lat,
-        shippingLocation.lng,
-        current.latitude,
-        current.longitude
-      );
+    return candidates.reduce((best, current) => {
+      const bestDistance    = calculateDistance(shippingLocation.lat, shippingLocation.lng, best.latitude,    best.longitude);
+      const currentDistance = calculateDistance(shippingLocation.lat, shippingLocation.lng, current.latitude, current.longitude);
 
       return currentDistance < bestDistance ? current : best;
     });
+  }
 
-    // 6. Calcular total do pedido (usando os itens enriquecidos com preço do banco)
-    const totalAmount = enrichedItems.reduce((total, item) => {
-      return total + (item.quantity * item.unitPrice);
-    }, 0);
+  private calculateTotal(items: OrderItemEnrichedDTO[]): Decimal {
+    return items.reduce((total, item) => {
+      return total.plus(new Decimal(item.quantity).times(item.unitPrice));
+    }, new Decimal(0));
+  }
 
-    // 7. Processar pagamento
+  private async processPayment(cardNumber: string, amount: Decimal, customerId: string) {
     const payment = await paymentMock.charge({
-      cardNumber: data.payment.cardNumber,
-      amount: totalAmount,
-      description: `Order for customer ${customer.id}`, // Usando o ID real do banco
+      cardNumber,
+      amount:      amount.toNumber(),
+      description: `Order for customer ${customerId}`,
     });
 
-    if (payment.status === "declined") {
-      throw new AppError(
-        "Payment was declined",
-        402,
-        "PAYMENT_DECLINED"
-      );
-    }
+    if (payment.status === "declined")
+      throw new AppError("Payment was declined", 402, "PAYMENT_DECLINED");
 
-    // 8. Persistir pedido
-    const order = await this.orderRepository.create({
-      customerId: customer.id, // ID real que veio do Upsert
-      warehouseId: selectedWarehouse.id,
+    return payment;
+  }
 
-      shippingStreet: data.shippingAddress.street,
-      shippingNumber: data.shippingAddress.number,
-      shippingComplement: data.shippingAddress.complement ?? null,
-      shippingCity: data.shippingAddress.city,
-      shippingState: data.shippingAddress.state,
-      shippingCountry: data.shippingAddress.country,
-      shippingZipCode: data.shippingAddress.zipCode,
+  private buildResponse(
+    order:         { id: string; status: OrderStatus; createdAt: Date },
+    warehouse:     { name: string },
+    address:       CreateOrderDTO["shippingAddress"],
+    enrichedItems: OrderItemEnrichedDTO[],
+    totalAmount:   Decimal,
+  ): OrderResponseDTO {
+    const shipping: OrderShippingResponseDTO = {
+      street:     address.street,
+      number:     address.number,
+      complement: address.complement,
+      city:       address.city,
+      state:      address.state,
+      country:    address.country,
+      zipCode:    address.zipCode,
+    };
 
-      items: enrichedItems, // Passando os itens COM o unitPrice seguro
-      totalAmount,
-      paymentTransactionId: payment.transactionId,
-      status: OrderStatus.PAID,
-    });
-
-    // 9. Response DTO limpo
     return {
-      orderId: order.id,
-      status: order.status,
-      warehouse: {
-        id: selectedWarehouse.id,
-        name: selectedWarehouse.name,
-      },
-      items: enrichedItems, // Retorna os itens detalhados com o preço validado
-      totalAmount,
-      paymentTransactionId: payment.transactionId,
+      orderId:     order.id,
+      status:      order.status,
+      createdAt:   order.createdAt,
+      warehouse:   { name: warehouse.name },
+      shipping,
+      items: enrichedItems.map(item => ({
+        productId: item.productId,
+        quantity:  item.quantity,
+        unitPrice: item.unitPrice.toNumber(),
+        subtotal:  new Decimal(item.quantity).times(item.unitPrice).toNumber(),
+      })),
+      totalAmount: totalAmount.toNumber(),
     };
   }
 }

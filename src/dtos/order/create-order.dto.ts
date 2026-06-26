@@ -1,10 +1,15 @@
+export type OrderItemDTO = {
+  productId: string;
+  quantity: number;
+}
+
 export interface CreateOrderDTO {
   customerId: string;
 
   shippingAddress: {
     street: string;
     number: string;
-    complement?: string;
+    complement?: string | undefined;
     city: string;
     state: string;
     country: string;
@@ -18,9 +23,5 @@ export interface CreateOrderDTO {
     cvv: string;
   };
 
-  items: {
-    productId: string;
-    quantity: number;
-    unitPrice: number;
-  }[];
+  items: OrderItemDTO[];
 }

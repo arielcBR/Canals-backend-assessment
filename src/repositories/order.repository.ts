@@ -1,13 +1,12 @@
 import { prisma } from "../lib/prisma";
 import type { IOrderRepository } from "../interfaces/order.repository.interface";
 import { OrderStatus } from '../../generated/prisma/client'
+import Decimal from "decimal.js"; // ← remove o "type"
 
 export class OrderRepository implements IOrderRepository {
   async create(data: {
     customerId: string;
     warehouseId: string;
-    
-    // Novos campos alinhados com o seu schema.prisma
     shippingStreet: string;
     shippingNumber?: string;
     shippingComplement?: string | null;
@@ -15,54 +14,42 @@ export class OrderRepository implements IOrderRepository {
     shippingState: string;
     shippingCountry: string;
     shippingZipCode: string;
-
-    // Alterado para Decimal, vamos tipar como number aqui e o Prisma converte
-    totalAmount: number;
+    totalAmount: Decimal; // ← era number, alinha com o service
     paymentTransactionId: string | null;
     status: OrderStatus;
-    
     items: {
       productId: string;
       quantity: number;
-      unitPrice: number;
+      unitPrice: Decimal;
     }[];
   }) {
     return prisma.$transaction(async (tx) => {
-      // 1. criar order
-      // 1. criar order
       const order = await tx.order.create({
         data: {
           customerId: data.customerId,
           warehouseId: data.warehouseId,
-          
           shippingStreet: data.shippingStreet,
-          shippingNumber: data.shippingNumber ?? "S/N", 
-          
-          // BLINDAGEM AQUI: Força o fallback para null se chegar undefined
-          shippingComplement: data.shippingComplement ?? null, 
-          
+          shippingNumber: data.shippingNumber ?? "S/N",
+          shippingComplement: data.shippingComplement ?? null,
           shippingCity: data.shippingCity,
           shippingState: data.shippingState,
           shippingCountry: data.shippingCountry,
           shippingZipCode: data.shippingZipCode,
-          
-          totalAmount: data.totalAmount,
+          totalAmount: data.totalAmount, 
           paymentTransactionId: data.paymentTransactionId,
           status: data.status,
         },
       });
 
-      // 2. criar items
       await tx.orderItem.createMany({
         data: data.items.map((item) => ({
           orderId: order.id,
           productId: item.productId,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          unitPrice: item.unitPrice, 
         })),
       });
 
-      // 3. atualizar estoque do warehouse
       for (const item of data.items) {
         await tx.warehouseInventory.update({
           where: {
@@ -72,9 +59,7 @@ export class OrderRepository implements IOrderRepository {
             },
           },
           data: {
-            quantity: {
-              decrement: item.quantity,
-            },
+            quantity: { decrement: item.quantity },
           },
         });
       }
@@ -82,6 +67,7 @@ export class OrderRepository implements IOrderRepository {
       return {
         id: order.id,
         status: order.status,
+        createdAt: order.createdAt, 
       };
     });
   }

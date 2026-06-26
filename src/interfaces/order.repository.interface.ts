@@ -1,3 +1,4 @@
+import type Decimal from 'decimal.js';
 import { OrderStatus } from '../../generated/prisma/client'
 
 export interface IOrderRepository {
@@ -13,14 +14,14 @@ export interface IOrderRepository {
     shippingCountry: string;
     shippingZipCode: string;
 
-    totalAmount: number;
+    totalAmount: Decimal;
     paymentTransactionId: string | null;
     status: OrderStatus;
     
     items: {
       productId: string;
       quantity: number;
-      unitPrice: number;
+      unitPrice: Decimal;
     }[];
   }): Promise<{ id: string; status: string }>;
 }
