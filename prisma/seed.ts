@@ -8,7 +8,7 @@ async function main() {
     return
   }
 
-  console.log('🌱 Seeding database...')
+  console.log('🌱 Seeding database...') 
 
   // ─── Cleanup ────────────────────────────────────────────────────────────────
   await prisma.orderItem.deleteMany()
