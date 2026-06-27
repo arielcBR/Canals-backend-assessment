@@ -1,5 +1,3 @@
-// src/mocks/geocoding.mock.ts
-
 import type { IGeocodingService, GeocodeResult } from "../interfaces/geocoding.service.interface";
 
 const CITY_COORDINATES: Record<string, GeocodeResult> = {
@@ -27,7 +25,6 @@ export const geocodingMock: IGeocodingService = {
 
     if (match) return match[1];
 
-    // fallback determinístico (evita crash no fluxo)
     return { lat: 0, lng: 0 };
   },
 };

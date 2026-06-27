@@ -3,25 +3,26 @@ import { OrderStatus } from '../../generated/prisma/client'
 
 export interface IOrderRepository {
   create(data: {
-    customerId: string;
-    warehouseId: string;
-    
-    shippingStreet: string;
-    shippingNumber?: string;
-    shippingComplement?: string | null;
-    shippingCity: string;
-    shippingState: string;
-    shippingCountry: string;
-    shippingZipCode: string;
-
-    totalAmount: Decimal;
+    customerId:           string;
+    warehouseId:          string;
+    shippingStreet:       string;
+    shippingNumber?:      string;
+    shippingComplement?:  string | null;
+    shippingCity:         string;
+    shippingState:        string;
+    shippingCountry:      string;
+    shippingZipCode:      string;
+    totalAmount:          Decimal;
     paymentTransactionId: string | null;
-    status: OrderStatus;
-    
+    status:               OrderStatus;
     items: {
       productId: string;
-      quantity: number;
+      quantity:  number;
       unitPrice: Decimal;
     }[];
-  }): Promise<{ id: string; status: string }>;
+  }): Promise<{
+    id:        string;
+    status:    OrderStatus; 
+    createdAt: Date;        
+  }>;
 }

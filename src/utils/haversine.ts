@@ -1,10 +1,10 @@
 /**
- * Calcula a distância entre dois pontos geográficos usando a fórmula de Haversine.
+ * Calculates the distance between two geographic points using the Haversine formula.
  *
- * A fórmula considera a Terra como uma esfera e retorna a distância aproximada em quilômetros.
+ * The formula treats the Earth as a sphere and returns the approximate distance in kilometers.
  *
- * IMPORTANTE: latitude e longitude devem ser convertidas de graus para radianos,
- * pois as funções trigonométricas do JavaScript trabalham em radianos.
+ * IMPORTANT: latitude and longitude must be converted from degrees to radians,
+ * as JavaScript's trigonometric functions operate in radians.
  */
 
 export function calculateDistance(
@@ -13,7 +13,7 @@ export function calculateDistance(
   lat2: number,
   lng2: number
 ): number {
-  const R = 6371; // Raio médio da Terra em km
+  const R = 6371; // Earth's mean radius in km
 
   const toRad = (value: number) => (value * Math.PI) / 180;
 

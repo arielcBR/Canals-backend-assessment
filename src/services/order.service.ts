@@ -20,20 +20,24 @@ import { OrderRepository } from "../repositories/order.repository";
 
 // utils
 import { calculateDistance } from "../utils/haversine";
+import type { IPaymentService } from "../interfaces/payment.service.interface";
 
 export class OrderService {
   private warehouseRepository: WarehouseRepository;
   private orderRepository: OrderRepository;
   private geocodingService: IGeocodingService;
+  private paymentService: IPaymentService;
 
   constructor(
     warehouseRepository = new WarehouseRepository(),
     orderRepository     = new OrderRepository(),
-    geocodingService: IGeocodingService = geocodingMock, 
+    geocodingService: IGeocodingService = geocodingMock,
+    paymentService: IPaymentService = paymentMock 
   ) {
     this.warehouseRepository = warehouseRepository;
     this.orderRepository     = orderRepository;
     this.geocodingService    = geocodingService;
+    this.paymentService      = paymentService;
   }
 
   async create(data: CreateOrderDTO): Promise<OrderResponseDTO> {
@@ -41,7 +45,7 @@ export class OrderService {
     const enrichedItems = await this.enrichItemsWithPrices(data.items);
     const warehouse     = await this.selectNearestWarehouse(data.items, data.shippingAddress);
     const totalAmount   = this.calculateTotal(enrichedItems);
-    const payment       = await this.processPayment(data.payment.cardNumber, totalAmount, customer.id);
+    const payment       = await this.processPayment(data.payment, totalAmount, customer.id);
     const order         = await this.orderRepository.create({
       customerId:           customer.id,
       warehouseId:          warehouse.id,
@@ -127,17 +131,20 @@ export class OrderService {
     }, new Decimal(0));
   }
 
-  private async processPayment(cardNumber: string, amount: Decimal, customerId: string) {
-    const payment = await paymentMock.charge({
-      cardNumber,
+  private async processPayment(payment: CreateOrderDTO["payment"], amount: Decimal, customerId: string) {
+    const result = await this.paymentService.charge({
+      cardNumber:  payment.cardNumber,
+      holderName:  payment.holderName,
+      expiryDate:  payment.expiryDate,
+      cvv:         payment.cvv,
       amount:      amount.toNumber(),
       description: `Order for customer ${customerId}`,
     });
-
-    if (payment.status === "declined")
+  
+    if (result.status === "declined")
       throw new AppError("Payment was declined", 402, "PAYMENT_DECLINED");
-
-    return payment;
+  
+    return result;
   }
 
   private buildResponse(
