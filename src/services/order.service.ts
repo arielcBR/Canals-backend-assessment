@@ -1,5 +1,6 @@
 import { AppError } from "../errors/AppError";
 import { OrderStatus } from '../../generated/prisma/client'
+import type { IGeocodingService } from "../interfaces/geocoding.service.interface";
 import type { CreateOrderDTO } from "../dtos/order/create-order.dto";
 import type { OrderItemDTO } from "../dtos/order/create-order.dto";
 import type { OrderItemEnrichedDTO } from "../dtos/order/order-item-enriched.dto";
@@ -21,8 +22,19 @@ import { OrderRepository } from "../repositories/order.repository";
 import { calculateDistance } from "../utils/haversine";
 
 export class OrderService {
-  private warehouseRepository = new WarehouseRepository();
-  private orderRepository = new OrderRepository();
+  private warehouseRepository: WarehouseRepository;
+  private orderRepository: OrderRepository;
+  private geocodingService: IGeocodingService;
+
+  constructor(
+    warehouseRepository = new WarehouseRepository(),
+    orderRepository     = new OrderRepository(),
+    geocodingService: IGeocodingService = geocodingMock, 
+  ) {
+    this.warehouseRepository = warehouseRepository;
+    this.orderRepository     = orderRepository;
+    this.geocodingService    = geocodingService;
+  }
 
   async create(data: CreateOrderDTO): Promise<OrderResponseDTO> {
     const customer      = await this.validateCustomer(data.customerId);
@@ -92,7 +104,7 @@ export class OrderService {
     items: OrderItemDTO[],
     address: CreateOrderDTO["shippingAddress"]
   ) {
-    const shippingLocation = await geocodingMock.geocode(
+    const shippingLocation = await this.geocodingService.geocode(
       `${address.street}, ${address.city}, ${address.state}, ${address.country}`
     );
 
