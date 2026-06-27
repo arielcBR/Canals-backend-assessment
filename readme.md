@@ -77,14 +77,14 @@ API will be available at `http://localhost:3000`.
 
 ## API
 
-### POST /api/orders
+### POST /api/v1/orders
 
 Creates a new order. Automatically selects the nearest warehouse that has sufficient stock for all requested items, then processes payment.
 
 **Request body:**
 
 ```json
-// Request body — exemplo real
+// Request body
 {
   "customerId": "uuid-from-seed",
   "shippingAddress": {
