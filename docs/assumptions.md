@@ -104,11 +104,12 @@ The payment provider is implemented as a mocked external dependency.
 Responsibilities:
 
 * Receive card number
+* Receive card holder name
+* Receive card expiry date
+* Receive CVV
 * Receive amount
 * Receive payment description
 * Return a transaction result
-
-The implementation simulates a successful payment response and allows the business flow to be exercised without relying on a third-party integration.
 
 ---
 
