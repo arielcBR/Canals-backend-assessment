@@ -8,7 +8,7 @@ Backend service for an e-commerce order management platform. Handles order creat
 
 - **Runtime:** Node.js + TypeScript
 - **Framework:** Express
-- **ORM:** Prisma
+- **ORM:** Prisma 7
 - **Database:** PostgreSQL
 - **Validation:** Zod
 - **Infra:** Docker Compose
@@ -27,8 +27,8 @@ Backend service for an e-commerce order management platform. Handles order creat
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/canals-orders-api.git
-cd canals-orders-api
+git clone https://github.com/arielcBR/Canals-backend-assessment.git
+cd canals_api
 ```
 
 ### 2. Set up environment variables
@@ -60,10 +60,11 @@ npx prisma migrate dev
 ### 6. Seed the database
 
 ```bash
-npm run seed
+npx tsx prisma/seed.ts
 ```
 
-The seed output will print the IDs you need for testing:
+The seed populates customers, products, warehouses and inventory. IDs are printed to the console — copy them to use in your requests.
+
 ### 7. Start the server
 
 ```bash
@@ -76,29 +77,33 @@ API will be available at `http://localhost:3000`.
 
 ## API
 
-### POST /orders
+### POST /api/orders
 
 Creates a new order. Automatically selects the nearest warehouse that has sufficient stock for all requested items, then processes payment.
 
 **Request body:**
 
 ```json
+// Request body — exemplo real
 {
   "customerId": "uuid-from-seed",
   "shippingAddress": {
-    "street": "Rua Independência",
-    "number": "100",
-    "complement": "Apto 12",
+    "street": "Honduras Street",
+    "number": "300",
+    "complement": "208",
     "city": "São Leopoldo",
     "state": "RS",
     "country": "Brazil",
     "zipCode": "93010-000"
   },
   "payment": {
-    "cardNumber": "1234567890123456"
+    "cardNumber": "1234567890123456",
+    "holderName": "Alice Johnson",
+    "expiryDate": "12/27",
+    "cvv": "123"
   },
   "items": [
-    { "productId": "uuid-from-seed", "quantity": 2 },
+    { "productId": "uuid-from-seed", "quantity": 1 },
     { "productId": "uuid-from-seed", "quantity": 1 }
   ]
 }
@@ -108,22 +113,39 @@ Creates a new order. Automatically selects the nearest warehouse that has suffic
 
 ```json
 {
-  "orderId": "uuid",
-  "status": "PAID",
-  "warehouse": {
-    "id": "uuid",
-    "name": "São Paulo Warehouse"
+	"message": "Order created succesfully!",
+	"data": {
+		"orderId": "uuid",
+		"status": "PAID",
+		"createdAt": "2026-06-27T04:09:27.777Z",
+		"warehouse": {
+			"name": "São Paulo Warehouse"
+		},
+		"shipping": {
+			"street": "Honduras Street",
+			"number": "300",
+			"complement": "208",
+			"city": "São Leopoldo",
+			"state": "RS",
+			"country": "Brazil",
+			"zipCode": "93010-000"
+		},
+		"items": [
+  {
+    "productId": "uuid-from-seed",
+    "quantity": 1,
+    "unitPrice": 28.5,
+    "subtotal": 28.5
   },
-  "totalAmount": "120.48",
-  "transactionId": "mock-txn-xxxxxxxx",
-  "items": [
-    {
-      "productId": "uuid",
-      "productName": "Electrical Cable 10m",
-      "quantity": 2,
-      "unitPrice": "45.99"
-    }
-  ]
+  {
+    "productId": "uuid-from-seed",
+    "quantity": 1,
+    "unitPrice": 189.9,
+    "subtotal": 189.9
+  }
+],
+		"totalAmount": 218.4
+	}
 }
 ```
 
@@ -135,8 +157,9 @@ Creates a new order. Automatically selects the nearest warehouse that has suffic
 | 404 | `CUSTOMER_NOT_FOUND` | The provided customerId does not exist |
 | 404 | `PRODUCT_NOT_FOUND` | One or more productIds do not exist |
 | 402 | `PAYMENT_DECLINED` | Payment mock declined the transaction |
+| 422 | `EMPTY_ORDER` | items array is empty |
 | 422 | `WAREHOUSE_NOT_FOUND` | No warehouse has sufficient stock for all items |
-| 500 | `INTERNAL_ERROR` | Unexpected server error |
+| 500 | `INTERNAL_SERVER_ERROR` | Unexpected server error |
 
 All errors follow the same shape:
 
@@ -144,53 +167,62 @@ All errors follow the same shape:
 {
   "error": {
     "code": "WAREHOUSE_NOT_FOUND",
-    "message": "No warehouse has sufficient stock for all requested items."
+    "message": "No warehouse has sufficient stock for all items"
   }
 }
 ```
 
 ---
 
-## Seed Test Scenario
+## Seed Test Scenarios
 
-The seed is designed to validate warehouse selection logic:
+The seed is designed to validate warehouse selection logic. Reference point: **São Leopoldo, RS, Brazil**.
 
-- **Shipping address:** São Leopoldo, RS, Brazil (-29.7597, -51.1491)
-- **Porto Alegre Warehouse** (~25km away) — closest, but missing *Distribution Panel* stock → discarded
-- **São Paulo Warehouse** (~1100km away) — full stock → selected
-- **Chicago Warehouse** (~10500km away) — full stock, control for extreme distance
+| Warehouse | Distance | Stock |
+|-----------|----------|-------|
+| Porto Alegre | ~25km | No `Distribution Panel`, no `Step-down Transformer` |
+| Caxias do Sul | ~120km | No `Distribution Panel`, no `Step-down Transformer` |
+| São Paulo | ~1100km | No `Step-down Transformer` |
+| Chicago | ~10500km | Full stock |
 
-To trigger the fallback scenario, include `Distribution Panel` in your order items.
-To trigger `WAREHOUSE_NOT_FOUND`, request a quantity higher than any warehouse carries.
+**Scenario examples:**
+
+- Order `Electrical Cable` qty 1 → **Porto Alegre** (nearest with stock)
+- Order `Electrical Cable` qty 150 → **Caxias do Sul** (Porto Alegre has only 100)
+- Order `Distribution Panel` qty 1 → **São Paulo** (Porto Alegre and Caxias lack it)
+- Order `Step-down Transformer` qty 1 → **Chicago** (only warehouse with it)
+- Order any product qty 99999 → `422 WAREHOUSE_NOT_FOUND`
+
+**To trigger payment declined:** use `cardNumber: "0000000000000000"`.
 
 ---
 
 ## Design Decisions
 
 **Inline shipping address**
-The shipping address is stored directly on the order rather than as a foreign key to a separate table. Delivery addresses frequently differ from a customer's registered address, so embedding it avoids an unnecessary join and models the real-world behavior more accurately.
+Stored directly on the order rather than as a foreign key. Delivery addresses frequently differ from a customer's registered address, so embedding avoids an unnecessary join and models real-world behavior more accurately.
 
-**Haversine formula for distance**
-Warehouse proximity is calculated using the Haversine formula, which computes great-circle distance between two points on a spherical surface. Inputs are converted from degrees to radians before calculation. This is accurate enough for logistics at the scale of this service and requires no external dependency.
+**Haversine formula for warehouse selection**
+Proximity is calculated using the Haversine formula, which computes great-circle distance between two geographic points. Inputs are converted from degrees to radians before calculation. Accurate enough for logistics at this scale with no external dependency.
 
 **Geocoding mock**
-Address-to-coordinates conversion is mocked with a fixed city-to-coordinates map. In production, this would be replaced by a call to a geocoding API (e.g. Google Maps Geocoding) with no changes to the service interface — the mock and the real implementation share the same `IGeocodingService` contract.
+Address-to-coordinates conversion is mocked with a fixed city-to-coordinates map behind an `IGeocodingService` interface. In production, replacing it with Google Maps or Mapbox requires only a new class implementing that interface — the service layer does not change.
 
 **Payment mock**
-The payment service is mocked behind an `IPaymentService` interface. Card number `0000000000000000` always returns declined, enabling sad-path testing without a real payment provider.
+Mocked behind `IPaymentService`. Card `0000000000000000` always returns declined. All card fields (`cardNumber`, `holderName`, `expiryDate`, `cvv`) are forwarded to the mock exactly as they would be to a real gateway.
+
+**Decimal precision for financial values**
+All monetary calculations use `decimal.js` internally to avoid IEEE 754 floating-point errors. Values are converted to `number` only at the response boundary.
 
 **Database transaction scope**
-Order creation, order item insertion, and inventory decrement all run inside a single `prisma.$transaction()`. This guarantees atomicity: if any step fails, the entire operation is rolled back and no partial state is persisted.
+Order creation, item insertion, and inventory decrement all run inside a single `prisma.$transaction()`. If any step fails, the entire operation rolls back with no partial state persisted.
 
 ---
 
 ## Trade-offs & Considerations
 
 **No inventory locking**
-Inventory is decremented within the order transaction, but without a pessimistic lock (`SELECT FOR UPDATE`). Under concurrent load, two simultaneous requests could both pass the stock check and then both decrement, potentially driving inventory negative. The `WarehouseInventory` table is structured to support adding either pessimistic locking or optimistic concurrency control (row versioning) with minimal changes. Concurrency handling was explicitly out of scope per the assessment requirements.
+Inventory is decremented within the transaction but without a pessimistic lock (`SELECT FOR UPDATE`). Under concurrent load, two simultaneous requests could both pass the stock check and both decrement, potentially driving inventory negative. The schema supports adding locking or optimistic concurrency control with minimal changes. Concurrency was explicitly out of scope per the assessment requirements.
 
 **No authentication**
-Auth middleware was intentionally omitted per the assessment spec. In production, all routes would be protected and `customerId` would be derived from the authenticated session rather than supplied by the client.
-
-**Mock services are not injectable**
-The geocoding and payment mocks are imported directly rather than injected via a DI container. For a production system, dependency injection would make it easier to swap implementations and test in isolation. For the scope of this assessment, direct imports keep the code simpler without meaningful tradeoff.
+Intentionally omitted per the assessment spec. In production, all routes would be protected and `customerId` would be derived from the authenticated session rather than supplied by the client.
