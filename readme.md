@@ -229,3 +229,22 @@ Inventory is decremented within the transaction but without a pessimistic lock (
 
 **No authentication**
 Intentionally omitted per the assessment spec. In production, all routes would be protected and `customerId` would be derived from the authenticated session rather than supplied by the client.
+
+---
+
+## Postman Collection
+
+The repository includes a Postman collection covering all documented scenarios.
+
+Coverage:
+
+- Warehouse selection
+- Stock validation
+- Payment declined
+- Customer/Product validation
+- Geocoding failures
+- Zod request validation
+
+Location:
+
+docs/postman/Canals Orders API.postman_collection.json
