@@ -159,6 +159,7 @@ Creates a new order. Automatically selects the nearest warehouse that has suffic
 | 402 | `PAYMENT_DECLINED` | Payment mock declined the transaction |
 | 422 | `EMPTY_ORDER` | items array is empty |
 | 422 | `WAREHOUSE_NOT_FOUND` | No warehouse has sufficient stock for all items |
+| 422 | `GEOCODING_FAILED` | Shipping address city not recognized by geocoding service |
 | 500 | `INTERNAL_SERVER_ERROR` | Unexpected server error |
 
 All errors follow the same shape:
@@ -207,6 +208,8 @@ Proximity is calculated using the Haversine formula, which computes great-circle
 
 **Geocoding mock**
 Address-to-coordinates conversion is mocked with a fixed city-to-coordinates map behind an `IGeocodingService` interface. In production, replacing it with Google Maps or Mapbox requires only a new class implementing that interface — the service layer does not change.
+
+The mock geocoding service uses only the city, state, and country fields from the shipping address. Street, number, complement, and zip code are persisted with the order but are not considered when selecting the nearest warehouse.
 
 **Payment mock**
 Mocked behind `IPaymentService`. Card `0000000000000000` always returns declined. All card fields (`cardNumber`, `holderName`, `expiryDate`, `cvv`) are forwarded to the mock exactly as they would be to a real gateway.

@@ -108,9 +108,11 @@ export class OrderService {
     items: OrderItemDTO[],
     address: CreateOrderDTO["shippingAddress"]
   ) {
-    const shippingLocation = await this.geocodingService.geocode(
-      `${address.street}, ${address.city}, ${address.state}, ${address.country}`
-    );
+    const shippingLocation = await this.geocodingService.geocode({
+      city: address.city,
+      state: address.state,
+      country: address.country,
+    });
 
     const candidates = await this.warehouseRepository.findWarehousesWithStock(items);
 
