@@ -73,6 +73,14 @@ npm run dev
 
 API will be available at `http://localhost:3000`.
 
+**Environment Variables:**
+
+| Variable | Description | Default |
+|--------|------|--------|
+| DATABASE_URL | `PostgreSQL connection string` | postgresql://admin:adminpassword@localhost:5432/canals_orders?schema=public |
+| PORT | `Application port` | 3000 |
+
+
 ---
 
 ## API
