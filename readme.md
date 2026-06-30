@@ -23,54 +23,48 @@ Backend service for an e-commerce order management platform. Handles order creat
 ---
 
 ## Getting Started
-
 ### 1. Clone the repository
-
 ```bash
 git clone https://github.com/arielcBR/Canals-backend-assessment.git
-cd canals_api
+cd Canals-backend-assessment
 ```
 
 ### 2. Set up environment variables
-
 ```bash
 cp .env.example .env
 ```
-
 The default `.env` works out of the box with the provided Docker Compose setup. No changes needed to run locally.
 
 ### 3. Start the database
-
 ```bash
 docker compose up -d
 ```
 
 ### 4. Install dependencies
-
 ```bash
 npm install
 ```
 
 ### 5. Run migrations
-
 ```bash
 npx prisma migrate dev
 ```
 
-### 6. Seed the database
-
+### 6. Generate Prisma client
 ```bash
-npx tsx prisma/seed.ts
+npx prisma generate
 ```
 
+### 7. Seed the database
+```bash
+npm run seed
+```
 The seed populates customers, products, warehouses and inventory. IDs are printed to the console — copy them to use in your requests.
 
-### 7. Start the server
-
+### 8. Start the server
 ```bash
 npm run dev
 ```
-
 API will be available at `http://localhost:3000`.
 
 **Environment Variables:**
@@ -256,3 +250,19 @@ Coverage:
 Location:
 
 docs/postman/Canals Orders API.postman_collection.json
+
+## Manual Test Scenarios
+
+The repository includes a documented set of 16 manual test scenarios in [`docs/critical_test_scenarios.pdf`](./docs/critical_test_scenarios.pdf) and an Insomnia/Postman-compatible collection in [`docs/insomnia/canals_api_test_scenarios.har`](./docs/insomnia/canals_api_test_scenarios.har).
+
+Coverage:
+- Happy path — nearest warehouse selected
+- Warehouse selection fallback
+- Stock validation
+- Payment declined
+- Customer/Product validation
+- Geocoding failures
+- Zod request validation
+
+> **Before importing the collection:** run the seed (`npx tsx prisma/seed.ts`) and replace the placeholder customer and product IDs in each request with the IDs printed to the console. All requests use `<ID_ALICE>`, `<ID_ELECTRICAL_CABLE>` and similar placeholders that must be updated before testing.
+> 
